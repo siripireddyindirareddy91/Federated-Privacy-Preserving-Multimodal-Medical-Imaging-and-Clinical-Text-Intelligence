@@ -2,6 +2,16 @@
 
 ## Python backend (required for functioning analyses and training)
 
+### Render Blueprint setup
+
+Install and authorize the Render app in Codex, or sign in to the Render dashboard. Create a Blueprint from this repository and select the root `render.yaml`. It declares a free Singapore web service and a free PostgreSQL database, connects the database URL automatically, generates JWT_SECRET, and configures both Vercel frontend origins for CORS. Supply a unique DEMO_PASSWORD in Render's secret prompt; it seeds admin@medifed.ai on the new database. Do not reuse the local demonstration password on a public deployment.
+
+The backend accepts Render's native postgresql:// connection strings and selects the installed psycopg 3 driver. Docker installs CPU-only PyTorch wheels before application dependencies. Database ingress is private-only. Render resources are not created merely by committing this file: the Blueprint must be applied through an authenticated account.
+
+Free hosting is suitable for a research preview: it can sleep and has resource limits, and free PostgreSQL expires after 30 days. See [Render free instance limits](https://render.com/docs/free). A long-lived deployment needs an appropriate database plan and backups. Do not silently upgrade to a paid plan when free capacity is unavailable.
+
+After the backend is healthy, configure NEXT_PUBLIC_API_URL on the existing Vercel project with the actual Render service URL and rebuild the frontend. Verify login, hospital CRUD, text/image uploads, fusion, an actual federated experiment, evaluation, report export and audit records against the hosted API before claiming the live integration is complete.
+
 1. Provision a persistent Docker-capable Python host, e.g. Render or Railway. The repository contains `render.yaml`. No backend account is provisioned by this project.
 2. Build using backend/Dockerfile with backend as build context. Start command is `uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1`.
 3. Set `APP_ENV=production`, a long random `JWT_SECRET`, `DATABASE_URL` to PostgreSQL, `DEMO_PASSWORD` to a unique administrator password, and `CORS_ORIGINS` to the exact HTTPS frontend origin. Multiple origins may be comma-separated.

@@ -23,10 +23,11 @@ from sqlalchemy import create_engine, Column, Integer, String, JSON, ForeignKey,
 from sqlalchemy.orm import declarative_base, sessionmaker
 from PIL import Image, UnidentifiedImageError
 from .ml import FusionModel, synthetic, train_round, evaluate, analyze_text, image_features
+from .database_config import normalize_database_url
 
 ROOT=Path(__file__).resolve().parents[1]
-DATABASE_URL=os.getenv('DATABASE_URL',f'sqlite:///{ROOT / "medifed.db"}')
-engine=create_engine(DATABASE_URL,**({'connect_args':{'check_same_thread':False}} if DATABASE_URL.startswith('sqlite') else {}))
+DATABASE_URL=normalize_database_url(os.getenv('DATABASE_URL',f'sqlite:///{ROOT / "medifed.db"}'))
+engine=create_engine(DATABASE_URL,pool_pre_ping=True,**({'connect_args':{'check_same_thread':False}} if DATABASE_URL.startswith('sqlite') else {}))
 Session=sessionmaker(bind=engine,expire_on_commit=False)
 Base=declarative_base()
 SECRET=os.getenv('JWT_SECRET') or secrets.token_urlsafe(48)
@@ -55,7 +56,7 @@ with Session() as db:
     db.commit()
 
 app=FastAPI(title='MediFed AI Research API',version='1.0.0',description='Synthetic research only. Local in-process federated learning; no clinical validation.')
-app.add_middleware(CORSMiddleware,allow_origins=os.getenv('CORS_ORIGINS','http://localhost:3000').split(','),allow_credentials=True,allow_methods=['GET','POST','PUT','DELETE'],allow_headers=['Authorization','Content-Type'])
+app.add_middleware(CORSMiddleware,allow_origins=[origin.strip().rstrip('/') for origin in os.getenv('CORS_ORIGINS','http://localhost:3000').split(',') if origin.strip()],allow_credentials=True,allow_methods=['GET','POST','PUT','DELETE'],allow_headers=['Authorization','Content-Type'])
 security=HTTPBearer()
 rate_lock=threading.Lock(); rates={}
 @app.middleware('http')

@@ -99,3 +99,9 @@ def test_medical_formats(client,headers):
     stream=io.BytesIO();ds.save_as(stream,enforce_file_format=True)
     r=client.post('/api/images/upload',files={'file':('synthetic.dcm',stream.getvalue(),'application/dicom')},headers=headers)
     assert r.status_code==200 and 'Synthetic^Patient' not in str(r.json())
+
+def test_provider_database_urls():
+    from app.database_config import normalize_database_url
+    for scheme in ['postgres://','postgresql://','postgresql+psycopg://']:
+        assert normalize_database_url(scheme+'user:password@db:5432/research?sslmode=require')=='postgresql+psycopg://user:password@db:5432/research?sslmode=require'
+    assert normalize_database_url('sqlite:///local.db')=='sqlite:///local.db'
