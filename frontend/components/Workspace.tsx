@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { researchSamples } from "../lib/samples";
 import {
   Activity,
   ArrowDownToLine,
@@ -197,6 +198,7 @@ export default function Workspace() {
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [query, setQuery] = useState("");
+  const [searchRecords, setSearchRecords] = useState<Row[]>([]);
   const [overview, setOverview] = useState<Row>({
     network: seedHospitals,
     performance: [],
@@ -238,6 +240,9 @@ export default function Workspace() {
     setToken(sessionStorage.getItem("medifed.token") || "");
     setDark(localStorage.getItem("medifed.theme") === "dark");
     setReady(true);
+    const sampleId = new URLSearchParams(window.location.search).get("sample");
+    const sample = researchSamples.find((s) => s.id === sampleId);
+    if (sample) setText(sample.text);
   }, []);
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
@@ -293,6 +298,18 @@ export default function Workspace() {
       setOnline(false);
     }
   }, [api, token]);
+  useEffect(() => {
+    if (!query.trim() || !online || !token) {
+      setSearchRecords([]);
+      return;
+    }
+    const controller = setTimeout(() => {
+      api(`/search?q=${encodeURIComponent(query.trim())}`)
+        .then(setSearchRecords)
+        .catch(() => setSearchRecords([]));
+    }, 250);
+    return () => clearTimeout(controller);
+  }, [query, online, token, api]);
   useEffect(() => {
     if (ready) void refresh();
   }, [ready, refresh]);
@@ -371,6 +388,16 @@ export default function Workspace() {
   );
   const hs = (online ? overview.network : seedHospitals) || [];
   const latest = (overview.performance || []).at(-1);
+  const queryWords = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  const matches = (value: string) =>
+    queryWords.every((word) => value.toLowerCase().includes(word));
+  const navigationMatches = items.filter((i) => matches(i[1]));
+  const sampleMatches = researchSamples.filter((s) =>
+    matches(`${s.id} ${s.title} ${s.terms}`),
+  );
+  const hospitalMatches = hs.filter((h: Row) =>
+    matches(`${h.name} ${h.location}`),
+  );
   if (!ready) return <div className="loading">Opening MediFed AI…</div>;
   return (
     <div className="app">
@@ -451,19 +478,61 @@ export default function Workspace() {
               />
               {query && (
                 <div className="search-results">
-                  {items
-                    .filter((i) =>
-                      i[1].toLowerCase().includes(query.toLowerCase()),
-                    )
-                    .map((i) => (
+                  {navigationMatches.map((i) => (
+                    <Link
+                      href={`/${i[0]}`}
+                      key={i[0]}
+                      onClick={() => setQuery("")}
+                    >
+                      {i[1]}
+                    </Link>
+                  ))}
+                  {sampleMatches.map((s) => (
+                    <Link
+                      key={s.id}
+                      href={`/clinical-text?sample=${s.id}`}
+                      onClick={() => {
+                        setText(s.text);
+                        setQuery("");
+                      }}
+                    >
+                      <strong>{s.title}</strong>
+                      <small>
+                        {s.id} · synthetic research sample · open to analyze
+                      </small>
+                    </Link>
+                  ))}
+                  {hospitalMatches.map((h: Row) => (
+                    <Link
+                      key={`hospital-${h.id}`}
+                      href="/hospitals"
+                      onClick={() => setQuery("")}
+                    >
+                      <strong>{h.name}</strong>
+                      <small>{h.location} · hospital directory</small>
+                    </Link>
+                  ))}
+                  {searchRecords
+                    .filter((r) => r.type !== "hospital")
+                    .map((r) => (
                       <Link
-                        href={`/${i[0]}`}
-                        key={i[0]}
+                        key={`${r.type}-${r.id}`}
+                        href={r.href}
                         onClick={() => setQuery("")}
                       >
-                        {i[1]}
+                        <strong>{r.title}</strong>
+                        <small>{r.type} · stored project record</small>
                       </Link>
                     ))}
+                  {!navigationMatches.length &&
+                    !sampleMatches.length &&
+                    !hospitalMatches.length &&
+                    !searchRecords.length && (
+                      <p className="search-empty">
+                        No matching project records. Try “cough”, “MRI”,
+                        “fever”, a hospital name, or an experiment name.
+                      </p>
+                    )}
                 </div>
               )}
             </div>

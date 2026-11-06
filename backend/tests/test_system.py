@@ -105,3 +105,9 @@ def test_provider_database_urls():
     for scheme in ['postgres://','postgresql://','postgresql+psycopg://']:
         assert normalize_database_url(scheme+'user:password@db:5432/research?sslmode=require')=='postgresql+psycopg://user:password@db:5432/research?sslmode=require'
     assert normalize_database_url('sqlite:///local.db')=='sqlite:///local.db'
+
+def test_search(client,headers):
+    found=client.get('/api/search',params={'q':'Apollo'},headers=headers)
+    assert found.status_code==200 and found.json()[0]['title']=='Apollo Research Hospital'
+    assert client.get('/api/search',params={'q':'nonexistent-unique-query'},headers=headers).json()==[]
+    assert client.get('/api/search',params={'q':''},headers=headers).status_code==422

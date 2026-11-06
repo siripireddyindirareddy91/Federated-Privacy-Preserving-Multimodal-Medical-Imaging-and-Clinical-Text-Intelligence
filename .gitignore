@@ -9,4 +9,5 @@ __pycache__/
 *.pt
 .venv/
 .vercel/
+.tools/
 backend/storage/

@@ -119,6 +119,19 @@ def health():
 @app.get('/api/hospitals')
 def hospitals(user=Depends(current_user)):
     with Session() as db: return [hospital_dict(h) for h in db.query(Hospital).all()]
+@app.get('/api/search')
+def search(q:str,user=Depends(current_user)):
+    words=q.lower().strip().split()
+    if not words or len(q)>120: raise HTTPException(422,'Search requires 1–120 characters')
+    def matches(value): return all(word in value.lower() for word in words)
+    results=[]
+    for h in hospitals(user):
+        if matches(h['name']+' '+h['location']): results.append({'id':h['id'],'type':'hospital','title':h['name'],'href':'/hospitals'})
+    for kind,href in [('experiment','/training-history'),('evaluation','/evaluation'),('dataset','/datasets'),('report','/analytics')]:
+        for row in records(kind,user):
+            title=str(row.get('name') or row.get('config',{}).get('name') or row.get('model') or row.get('modality') or f'{kind} #{row["id"]}')
+            if matches(title+' '+kind): results.append({'id':row['id'],'type':kind,'title':title,'href':href})
+    return results[:30]
 class HospitalInput(BaseModel):
     name:str=Field(min_length=3,max_length=120); location:str=Field(min_length=2,max_length=120); active:bool=True
     samples:int=Field(default=80,ge=16,le=1000); clinical:int=Field(default=80,ge=0,le=1000)
