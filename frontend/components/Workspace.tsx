@@ -251,7 +251,8 @@ export default function Workspace() {
     async (endpoint: string, method = "GET", body?: unknown, raw = false) => {
       if (!base) throw Error("Configure your Python API URL in Settings.");
       const headers: Record<string, string> = {};
-      if (token) headers.Authorization = `Bearer ${token}`;
+      const activeToken = sessionStorage.getItem("medifed.token") || token;
+      if (activeToken) headers.Authorization = `Bearer ${activeToken}`;
       if (body && !(body instanceof FormData))
         headers["Content-Type"] = "application/json";
       const res = await fetch(`${base.replace(/\/$/, "")}/api${endpoint}`, {
@@ -369,16 +370,28 @@ export default function Workspace() {
       setBusy(false);
     }
   }
-  function requireSession() {
-    if (!token)
-      throw Error("Sign in to your Python backend to use this workspace.");
-    if (!online)
-      throw Error(
-        "Python backend unavailable. Start it locally or configure its HTTPS URL in Settings.",
-      );
+  async function requireSession() {
+    if (!online) {
+      await api("/health");
+      setOnline(true);
+    }
+    if (sessionStorage.getItem("medifed.token")) return;
+    const credentials = {
+      email: `demo-${crypto.randomUUID()}@medifed.example`,
+      password: `${crypto.randomUUID()}${crypto.randomUUID()}`,
+    };
+    await api("/auth/register", "POST", credentials);
+    const session = await api("/auth/login", "POST", credentials);
+    sessionStorage.setItem("medifed.token", session.token);
+    sessionStorage.setItem("medifed.demo", "true");
+    setToken(session.token);
+    setUser(session.user);
+    setNotice(
+      "Your demo session is ready. Research results are saved for this browser tab.",
+    );
   }
   async function exportReport(format: string) {
-    requireSession();
+    await requireSession();
     const blob = await api("/reports/generate", "POST", { format }, true);
     download(blob, `medifed-report.${format}`);
     setNotice("Report downloaded from stored experiment records.");
@@ -614,6 +627,24 @@ export default function Workspace() {
               )}
             </div>
           </div>
+          {!token && module !== "register" && (
+            <div className="connection-note">
+              <span>
+                <strong>Try the research tools instantly.</strong> Start a demo
+                session, or sign in to an existing account.
+              </span>
+              <button
+                className="primary"
+                disabled={busy}
+                onClick={() => act(requireSession)}
+              >
+                {busy ? "Opening session…" : "Start demo session"}
+              </button>
+              <Link href="/login">
+                Sign in <ArrowRight size={14} />
+              </Link>
+            </div>
+          )}
           {notice && (
             <div className="notice" role="status">
               {notice}
@@ -862,8 +893,8 @@ export default function Workspace() {
                   : "Welcome to MediFed AI"}
               </h2>
               <p>
-                Connect to your Python API before signing in. New accounts
-                receive the researcher role.
+                Use Start demo session to try research tools immediately, or
+                sign in below to access your saved account.
               </p>
               <form
                 onSubmit={(e) => {
@@ -964,7 +995,7 @@ export default function Workspace() {
                     onSubmit={(e) => {
                       e.preventDefault();
                       act(async () => {
-                        requireSession();
+                        await requireSession();
                         await api(
                           `/hospitals${hospital.id ? `/${hospital.id}` : ""}`,
                           hospital.id ? "PUT" : "POST",
@@ -1055,7 +1086,7 @@ export default function Workspace() {
                               )
                             )
                               act(async () => {
-                                requireSession();
+                                await requireSession();
                                 await api(`/hospitals/${h.id}`, "DELETE");
                                 setRows(await api("/hospitals"));
                                 await refresh();
@@ -1131,7 +1162,7 @@ export default function Workspace() {
                   disabled={busy || (module === "imaging" && !file)}
                   onClick={() =>
                     act(async () => {
-                      requireSession();
+                      await requireSession();
                       let r;
                       if (file) {
                         const form = new FormData();
@@ -1282,7 +1313,7 @@ export default function Workspace() {
                   disabled={busy}
                   onClick={() =>
                     act(async () => {
-                      requireSession();
+                      await requireSession();
                       const sample_id = Number(
                         (
                           document.getElementById(
@@ -1336,7 +1367,7 @@ export default function Workspace() {
                   onSubmit={(e) => {
                     e.preventDefault();
                     act(async () => {
-                      requireSession();
+                      await requireSession();
                       const exp = await api(
                         "/federated/experiments",
                         "POST",
@@ -1534,7 +1565,7 @@ export default function Workspace() {
                     onSubmit={(e) => {
                       e.preventDefault();
                       act(async () => {
-                        requireSession();
+                        await requireSession();
                         await api("/privacy/configuration", "PUT", {
                           noise: config.noise,
                           clip_norm: config.clip_norm,
@@ -1615,7 +1646,7 @@ export default function Workspace() {
                   disabled={busy}
                   onClick={() =>
                     act(async () => {
-                      requireSession();
+                      await requireSession();
                       await api("/evaluation/run", "POST", {});
                       setRows(await api("/evaluation/results"));
                       await refresh();
@@ -1678,7 +1709,7 @@ export default function Workspace() {
                     e.preventDefault();
                     const d = new FormData(e.currentTarget);
                     act(async () => {
-                      requireSession();
+                      await requireSession();
                       await api("/datasets", "POST", {
                         name: d.get("name"),
                         hospital_id: Number(d.get("hospital_id")),
