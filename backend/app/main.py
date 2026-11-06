@@ -192,12 +192,15 @@ async def image_upload(file:UploadFile=File(...),user=Depends(current_user)):
             a=(a-a.min())/(a.max()-a.min()+1e-8)*255; image=Image.fromarray(a.astype('uint8'))
         elif ext=='.nii':
             import nibabel as nib
-            img=nib.Nifti1Image.from_bytes(data); a=img.get_fdata()
-            if a.size>20000000: raise ValueError('Volume exceeds voxel limit')
+            img=nib.Nifti1Image.from_bytes(data)
+            if np.prod(img.shape)>20000000: raise ValueError('Volume exceeds voxel limit')
+            a=img.get_fdata()
             a=a[:,:,a.shape[2]//2] if a.ndim==3 else a
             a=(a-a.min())/(a.max()-a.min()+1e-8)*255; image=Image.fromarray(a.astype('uint8'))
         else:
-            image=Image.open(io.BytesIO(data)); image.load()
+            image=Image.open(io.BytesIO(data))
+            if image.width*image.height>20000000: raise ValueError('Image exceeds pixel limit')
+            image.load()
         width,height=image.size
         if width*height>20000000: raise ValueError('Image exceeds pixel limit')
         emb=image_features(image); preview=image.convert('L').resize((224,224)); out=io.BytesIO(); preview.save(out,format='PNG')

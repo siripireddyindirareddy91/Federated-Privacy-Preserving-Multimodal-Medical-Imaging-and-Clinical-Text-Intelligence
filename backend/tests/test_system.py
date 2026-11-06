@@ -81,3 +81,21 @@ def test_role_and_ownership(client,headers):
 def test_validation(client,headers):
     assert client.post('/api/federated/experiments',json={'rounds':9999},headers=headers).status_code==422
     assert client.put('/api/privacy/configuration',json={'noise':-1},headers=headers).status_code==422
+
+def test_medical_formats(client,headers):
+    import numpy as np
+    import nibabel as nib
+    from pydicom.dataset import FileDataset, FileMetaDataset
+    from pydicom.uid import ExplicitVRLittleEndian, SecondaryCaptureImageStorage, generate_uid
+    volume=nib.Nifti1Image(np.arange(512,dtype=np.int16).reshape(8,8,8),np.eye(4))
+    r=client.post('/api/images/upload',files={'file':('synthetic.nii',volume.to_bytes(),'application/octet-stream')},headers=headers)
+    assert r.status_code==200 and r.json()['width']==8
+    meta=FileMetaDataset(); meta.TransferSyntaxUID=ExplicitVRLittleEndian
+    meta.MediaStorageSOPClassUID=SecondaryCaptureImageStorage;meta.MediaStorageSOPInstanceUID=generate_uid()
+    ds=FileDataset(None,{},file_meta=meta,preamble=b'\0'*128)
+    ds.Rows=8;ds.Columns=8;ds.SamplesPerPixel=1;ds.PhotometricInterpretation='MONOCHROME2'
+    ds.BitsAllocated=16;ds.BitsStored=16;ds.HighBit=15;ds.PixelRepresentation=0
+    ds.PatientName='Synthetic^Patient';ds.PixelData=np.arange(64,dtype=np.uint16).tobytes()
+    stream=io.BytesIO();ds.save_as(stream,enforce_file_format=True)
+    r=client.post('/api/images/upload',files={'file':('synthetic.dcm',stream.getvalue(),'application/dicom')},headers=headers)
+    assert r.status_code==200 and 'Synthetic^Patient' not in str(r.json())
